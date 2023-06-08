@@ -1,0 +1,21 @@
+{
+    "name": "do IT S3 Client",
+    "dockerComposeFile": [ "../docker-compose.yml" ],
+    "service": "dev",
+    "workspaceFolder": "/workspace",
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "editor.fontFamily": "'Cascadia Code PL', monospace",
+                "editor.fontLigatures": true
+            },
+            "extensions": [
+                "ms-dotnettools.csdevkit",
+                "editorconfig.editorconfig",
+                "eamodio.gitlens",
+                "dotjoshjohnson.xml"
+            ]
+        }
+    },
+    "postCreateCommand": "git config --global --add safe.directory '/workspace'"
+}

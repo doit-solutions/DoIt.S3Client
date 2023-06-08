@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>DoIt.S3Client</PackageId>
+    <Authors>David Nordvall</Authors>
+    <Company>do IT Solutions AB</Company>
+    <Description>An Simple Storage Service (S3) client with support for writing objects of unknown size.</Description>
+    <Copyright>Copyright (c) 2023 do IT Solutions AB</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>Logo.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/doit-solutions/DoIt.S3Client</PackageProjectUrl>
+    <PackageTags>s3</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(ProjectDir)/../Logo.png" Pack="true" PackagePath="" />
+    <None Include="$(ProjectDir)/../README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aws4RequestSigner" Version="1.0.3" />
+  </ItemGroup>
+
+</Project>
