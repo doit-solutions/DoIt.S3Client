@@ -44,51 +44,43 @@ public class S3Client : IDisposable
     
     public async Task<Stream> OpenObjectForWritingAsync(string key, string contentType, StorageClass storageClass = StorageClass.Standard, CancellationToken cancellationToken = default)
     {
-        using (var req = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint, $"{key}?uploads")))
+        using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint, $"{key}?uploads"));
+        req.Content = new StringContent(string.Empty, new System.Net.Http.Headers.MediaTypeHeaderValue(contentType));
+        req.Content.Headers.Add("x-amz-storage-class", storageClass switch
         {
-            req.Content = new StringContent(string.Empty, new System.Net.Http.Headers.MediaTypeHeaderValue(contentType));
-            req.Content.Headers.Add("x-amz-storage-class", storageClass switch
+            StorageClass.Standard => "STANDARD",
+            StorageClass.Standard_InfrequentAccess => "STANDARD_IA",
+            StorageClass.OneZone_InfrequentAccess => "ONEZONE_IA",
+            StorageClass.IntelligentTiering => "INTELLIGENT_TIERING",
+            StorageClass.Archive_FlexibleRetrieval => "GLACIER",
+            StorageClass.Archive_InstantRetrieval => "GLACIER_IR",
+            StorageClass.Archive_DeepArchive => "DEEP_ARCHIVE",
+            #pragma warning disable 0618
+            StorageClass.ReducedRedundency => "REDUCED_REDUNDANCY",
+            #pragma warning restore 0618
+            _ => "STANDARD"
+        });
+        using var signedReq = await _signer.Sign(req, S3ServiceName, _region);
+        using var resp = await _client.SendAsync(signedReq, cancellationToken);
+        if (resp.IsSuccessStatusCode)
+        {
+            using var reader = XmlReader.Create(await resp.Content.ReadAsStreamAsync(cancellationToken), new XmlReaderSettings { Async = true, CloseInput = true, DtdProcessing = DtdProcessing.Ignore, XmlResolver = null });
+            while (await reader.ReadAsync())
             {
-                StorageClass.Standard => "STANDARD",
-                StorageClass.Standard_InfrequentAccess => "STANDARD_IA",
-                StorageClass.OneZone_InfrequentAccess => "ONEZONE_IA",
-                StorageClass.IntelligentTiering => "INTELLIGENT_TIERING",
-                StorageClass.Archive_FlexibleRetrieval => "GLACIER",
-                StorageClass.Archive_InstantRetrieval => "GLACIER_IR",
-                StorageClass.Archive_DeepArchive => "DEEP_ARCHIVE",
-                #pragma warning disable 0618
-                StorageClass.ReducedRedundency => "REDUCED_REDUNDANCY",
-                #pragma warning restore 0618
-                _ => "STANDARD"
-            });
-            using (var signedReq = await _signer.Sign(req, S3ServiceName, _region))
-            using (var resp = await _client.SendAsync(signedReq, cancellationToken))
-            {
-                if (resp.IsSuccessStatusCode)
+                if (reader.NodeType == XmlNodeType.Element && string.Equals(reader.LocalName, "UploadId", StringComparison.InvariantCulture)/* && string.Equals(reader.NamespaceURI, S3XmlNamespace, StringComparison.InvariantCulture)*/ && reader.Depth == 1)
                 {
-                    using (var reader = XmlReader.Create(await resp.Content.ReadAsStreamAsync(cancellationToken), new XmlReaderSettings { Async = true, CloseInput = true, DtdProcessing = DtdProcessing.Ignore, XmlResolver = null }))
-                    {
-                        while (await reader.ReadAsync())
-                        {
-                            if (reader.NodeType == XmlNodeType.Element && string.Equals(reader.LocalName, "UploadId", StringComparison.InvariantCulture)/* && string.Equals(reader.NamespaceURI, S3XmlNamespace, StringComparison.InvariantCulture)*/ && reader.Depth == 1)
-                            {
-                                var uploadId = await reader.ReadElementContentAsStringAsync();
-                                return new S3MultipartUploadStream(_client, _endpoint, _region, _signer, key, uploadId);
-                            }
-                        }
-                    }
+                    var uploadId = await reader.ReadElementContentAsStringAsync();
+                    return new S3MultipartUploadStream(_client, _endpoint, _region, _signer, key, uploadId);
                 }
-                else
-                {
-                    using (var reader = new StreamReader(await resp.Content.ReadAsStreamAsync(cancellationToken)))
-                    {
-                        throw new S3Exception(await reader.ReadToEndAsync(cancellationToken), resp.StatusCode);
-                    }
-                }
-
-                throw new S3Exception("Failed to find UploadId in response XML.", resp.StatusCode);
             }
         }
+        else
+        {
+            using var reader = new StreamReader(await resp.Content.ReadAsStreamAsync(cancellationToken));
+            throw new S3Exception(await reader.ReadToEndAsync(cancellationToken), resp.StatusCode);
+        }
+
+        throw new S3Exception("Failed to find UploadId in response XML.", resp.StatusCode);
     }
 
     public async Task<Stream> OpenObjectForReadingAsync(string key, CancellationToken cancellationToken = default)
@@ -101,61 +93,53 @@ public class S3Client : IDisposable
         }
         else
         {
-            using (var reader = new StreamReader(await resp.Content.ReadAsStreamAsync(cancellationToken)))
-            {
-                throw new S3Exception(await reader.ReadToEndAsync(cancellationToken), resp.StatusCode);
-            }
+            using var reader = new StreamReader(await resp.Content.ReadAsStreamAsync(cancellationToken));
+            throw new S3Exception(await reader.ReadToEndAsync(cancellationToken), resp.StatusCode);
         }
     }
 
     public async Task<MetaData?> GetObjectMetadataAsync(string key, CancellationToken cancellationToken = default)
     {
-        using (var req = await _signer.Sign(new HttpRequestMessage(HttpMethod.Head, new Uri(_endpoint, key)), S3ServiceName, _region))
-        using (var resp = await _client.SendAsync(req, cancellationToken))
+        using var req = await _signer.Sign(new HttpRequestMessage(HttpMethod.Head, new Uri(_endpoint, key)), S3ServiceName, _region);
+        using var resp = await _client.SendAsync(req, cancellationToken);
+        if (resp.IsSuccessStatusCode)
         {
-            if (resp.IsSuccessStatusCode)
-            {
-                return new MetaData
-                (
-                    resp.Headers.Contains("x-amz-storage-class") ? resp.Headers.GetValues("x-amz-storage-class").FirstOrDefault() switch
-                    {
-                        "STANDARD" => StorageClass.Standard,
-                        "STANDARD_IA" => StorageClass.Standard_InfrequentAccess,
-                        "ONEZONE_IA" => StorageClass.OneZone_InfrequentAccess,
-                        "INTELLIGENT_TIERING" => StorageClass.IntelligentTiering,
-                        "GLACIER" => StorageClass.Archive_FlexibleRetrieval,
-                        "GLACIER_IR" => StorageClass.Archive_InstantRetrieval,
-                        "DEEP_ARCHIVE" => StorageClass.Archive_DeepArchive,
-                        #pragma warning disable 0618
-                        "REDUCED_REDUNDANCY" => StorageClass.ReducedRedundency,
-                        #pragma warning restore 0618
-                        _ => StorageClass.Standard
-                    } : StorageClass.Standard,
-                    resp.Headers.ETag?.Tag ?? string.Empty,
-                    resp.Content.Headers.ContentLength ?? 0
-                );
-            }
-            else if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                return null;
-            }
-            else
-            {
-                using (var reader = new StreamReader(await resp.Content.ReadAsStreamAsync(cancellationToken)))
+            return new MetaData
+            (
+                resp.Headers.Contains("x-amz-storage-class") ? resp.Headers.GetValues("x-amz-storage-class").FirstOrDefault() switch
                 {
-                    throw new S3Exception(await reader.ReadToEndAsync(cancellationToken), resp.StatusCode);
-                }
-            }
+                    "STANDARD" => StorageClass.Standard,
+                    "STANDARD_IA" => StorageClass.Standard_InfrequentAccess,
+                    "ONEZONE_IA" => StorageClass.OneZone_InfrequentAccess,
+                    "INTELLIGENT_TIERING" => StorageClass.IntelligentTiering,
+                    "GLACIER" => StorageClass.Archive_FlexibleRetrieval,
+                    "GLACIER_IR" => StorageClass.Archive_InstantRetrieval,
+                    "DEEP_ARCHIVE" => StorageClass.Archive_DeepArchive,
+                    #pragma warning disable 0618
+                    "REDUCED_REDUNDANCY" => StorageClass.ReducedRedundency,
+                    #pragma warning restore 0618
+                    _ => StorageClass.Standard
+                } : StorageClass.Standard,
+                resp.Headers.ETag?.Tag ?? string.Empty,
+                resp.Content.Headers.ContentLength ?? 0
+            );
+        }
+        else if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+        else
+        {
+            using var reader = new StreamReader(await resp.Content.ReadAsStreamAsync(cancellationToken));
+            throw new S3Exception(await reader.ReadToEndAsync(cancellationToken), resp.StatusCode);
         }
     }
 
     public async Task<bool> DeleteObjectAsync(string key, CancellationToken cancellationToken = default)
     {
-        using (var req = await _signer.Sign(new HttpRequestMessage(HttpMethod.Delete, new Uri(_endpoint, key)), S3ServiceName, _region))
-        using (var resp = await _client.SendAsync(req, cancellationToken))
-        {
-            return resp.StatusCode == System.Net.HttpStatusCode.NoContent;
-        }
+        using var req = await _signer.Sign(new HttpRequestMessage(HttpMethod.Delete, new Uri(_endpoint, key)), S3ServiceName, _region);
+        using var resp = await _client.SendAsync(req, cancellationToken);
+        return resp.StatusCode == System.Net.HttpStatusCode.NoContent;
     }
 
     public void Dispose()
@@ -237,30 +221,29 @@ public class S3Client : IDisposable
                 UploadCurrentPart();
                 using (var req = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint, $"{_key}?uploadId={HttpUtility.UrlEncode(_uploadId)}")))
                 {
-                    using (var ms = new MemoryStream())
+                    using var ms = new MemoryStream();
+                    using (var writer = XmlWriter.Create(ms, new XmlWriterSettings { Indent = false, Encoding = Encoding.UTF8 }))
                     {
-                        using (var writer = XmlWriter.Create(ms, new XmlWriterSettings { Indent = false, Encoding = Encoding.UTF8 }))
+                        writer.WriteStartDocument();
+                        writer.WriteStartElement("CompleteMultipartUpload", S3XmlNamespace);
+                        foreach (var (partNumber, eTag) in _partETags)
                         {
-                            writer.WriteStartDocument();
-                            writer.WriteStartElement("CompleteMultipartUpload", S3XmlNamespace);
-                            foreach (var (partNumber, eTag) in _partETags)
-                            {
-                                writer.WriteStartElement("Part", S3XmlNamespace);
-                                writer.WriteElementString("PartNumber", S3XmlNamespace, partNumber.ToString(CultureInfo.InvariantCulture));
-                                writer.WriteElementString("ETag", S3XmlNamespace, eTag);
-                                writer.WriteEndElement(); // Part
-                            }
-                            writer.WriteEndElement(); // CompleteMultipartUpload
-                            writer.WriteEndDocument();
+                            writer.WriteStartElement("Part", S3XmlNamespace);
+                            writer.WriteElementString("PartNumber", S3XmlNamespace, partNumber.ToString(CultureInfo.InvariantCulture));
+                            writer.WriteElementString("ETag", S3XmlNamespace, eTag);
+                            writer.WriteEndElement(); // Part
                         }
-                        req.Content = new ByteArrayContent(ms.ToArray());
-                        req.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/xml", "utf-8");
-                        using (var signedReq = _signer.Sign(req, S3ServiceName, _region).ConfigureAwait(false).GetAwaiter().GetResult())
-                        using (var resp = _client.Send(req))
-                        using (var reader = new StreamReader(resp.EnsureSuccessStatusCode().Content.ReadAsStream()))
-                        {
-                            reader.ReadToEnd();
-                        }
+                        writer.WriteEndElement(); // CompleteMultipartUpload
+                        writer.WriteEndDocument();
+                    }
+                    req.Content = new ByteArrayContent(ms.ToArray());
+                    req.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/xml", "utf-8");
+                    using var signedReq = _signer.Sign(req, S3ServiceName, _region).ConfigureAwait(false).GetAwaiter().GetResult();
+                    using var resp = _client.Send(req);
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                        using var reader = new StreamReader(resp.Content.ReadAsStream());
+                        throw new S3Exception(reader.ReadToEnd(), resp.StatusCode);
                     }
                 }
                 _md5.Dispose();
@@ -275,19 +258,15 @@ public class S3Client : IDisposable
         {
             if (_currentPartLength > 0)
             {
-                using (var req = new HttpRequestMessage(HttpMethod.Put, new Uri(_endpoint, $"{_key}?partNumber={_currentPartNumber}&uploadId={HttpUtility.UrlEncode(_uploadId)}")))
-                {
-                    req.Content = new ByteArrayContent(_currentPart, 0, _currentPartLength);
-                    req.Content.Headers.ContentMD5 = _md5.ComputeHash(_currentPart, 0, _currentPartLength);
-                    using (var signedReq = _signer.Sign(req, S3ServiceName, _region).ConfigureAwait(false).GetAwaiter().GetResult())
-                    using (var resp = _client.Send(req))
-                    {
-                        var tmp = new StreamReader(resp.Content.ReadAsStream()).ReadToEnd();
-                        _partETags.Add(_currentPartNumber, resp.EnsureSuccessStatusCode().Headers.ETag?.Tag ?? throw new S3Exception("Multipart upload response contains no ETag header.", resp.StatusCode));
-                        _currentPartNumber += 1;
-                        _currentPartLength = 0;
-                    }
-                }
+                using var req = new HttpRequestMessage(HttpMethod.Put, new Uri(_endpoint, $"{_key}?partNumber={_currentPartNumber}&uploadId={HttpUtility.UrlEncode(_uploadId)}"));
+                req.Content = new ByteArrayContent(_currentPart, 0, _currentPartLength);
+                req.Content.Headers.ContentMD5 = _md5.ComputeHash(_currentPart, 0, _currentPartLength);
+                using var signedReq = _signer.Sign(req, S3ServiceName, _region).ConfigureAwait(false).GetAwaiter().GetResult();
+                using var resp = _client.Send(req);
+                var tmp = new StreamReader(resp.Content.ReadAsStream()).ReadToEnd();
+                _partETags.Add(_currentPartNumber, resp.EnsureSuccessStatusCode().Headers.ETag?.Tag ?? throw new S3Exception("Multipart upload response contains no ETag header.", resp.StatusCode));
+                _currentPartNumber += 1;
+                _currentPartLength = 0;
             }
         }
     }
