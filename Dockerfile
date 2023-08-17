@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:7.0.302-jammy
+FROM mcr.microsoft.com/dotnet/sdk:7.0.400-jammy
 ARG TARGETARCH
 RUN apt update && apt install -y zsh git
 ENV SHELL /bin/zsh
