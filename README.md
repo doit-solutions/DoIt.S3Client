@@ -1,9 +1,10 @@
 # do IT S3 Client
 [![NuGet Badge](https://buildstats.info/nuget/DoIt.S3Client)](https://www.nuget.org/packages/DoIt.S3Client/)
+
 A simple S3 (Simple Storage Service) client with support for uploading objects of unknown size.
 
 ## Why on earth would I want to upload objects of unknown size?!
-Well, you might, for example, want to compress a file/stream on the fly while uploading it to you S3 bucket.
+Well, you might, for example, want to compress or encrypt (or both!) a file/stream on the fly while uploading it to you S3 bucket.
 
 ## Good point! How would I do that?
 ```c#
@@ -30,9 +31,9 @@ Even if you upload very large files to your S3 bucket, only a single part will b
 ## What other operations does the client support?
 The primary rationale for this client is to be able to upload objects of unknown sizes in a simple way. The support for other operations is rather limited. The only supported operations are
 
- * Upload an object
- * Download an object
- * Get an object's metadata
- * Delete an object
+ * Upload an object (`OpenObjectForWritingAsync()`)
+ * Download an object (`OpenObjectForReadingAsync()`)
+ * Get an object's metadata (`GetObjectMetadataAsync()`)
+ * Delete an object (`DeleteObjectAsync()`)
 
  Specifically, bucket operations (for example, creating a bucket) is not supported by this client.
