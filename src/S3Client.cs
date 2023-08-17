@@ -20,7 +20,7 @@ public enum StorageClass
     ReducedRedundency
 }
 
-public record MetaData(StorageClass StorageClass, string ETag, long SizeInBytes);
+public record MetaData(StorageClass StorageClass, string ETag, long SizeInBytes, string? ContentType, string? ContentEncoding);
 
 public class S3Client : IDisposable
 {
@@ -42,10 +42,17 @@ public class S3Client : IDisposable
         _region = region;
     }
     
-    public async Task<Stream> OpenObjectForWritingAsync(string key, string contentType, StorageClass storageClass = StorageClass.Standard, CancellationToken cancellationToken = default)
+    public async Task<Stream> OpenObjectForWritingAsync(string key, string contentType, IEnumerable<string>? contentEncoding = null, StorageClass storageClass = StorageClass.Standard, CancellationToken cancellationToken = default)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint, $"{key}?uploads"));
         req.Content = new StringContent(string.Empty, new System.Net.Http.Headers.MediaTypeHeaderValue(contentType));
+        if (contentEncoding?.Any() ?? false)
+        {
+            foreach (var enc in contentEncoding)
+            {
+                req.Content.Headers.ContentEncoding.Add(enc);
+            }
+        }
         req.Content.Headers.Add("x-amz-storage-class", storageClass switch
         {
             StorageClass.Standard => "STANDARD",
@@ -121,7 +128,9 @@ public class S3Client : IDisposable
                     _ => StorageClass.Standard
                 } : StorageClass.Standard,
                 resp.Headers.ETag?.Tag ?? string.Empty,
-                resp.Content.Headers.ContentLength ?? 0
+                resp.Content.Headers.ContentLength ?? 0,
+                resp.Content.Headers.ContentType?.ToString(),
+                resp.Content.Headers.ContentEncoding?.ToString()
             );
         }
         else if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)

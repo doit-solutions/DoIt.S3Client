@@ -3,23 +3,21 @@ using DoIt.S3Client;
 
 try
 {
-    using var client = new S3Client(new Uri("http://s3:9090/"), "fr-par", "foo", "bar");
-    using (var zip = new ZipArchive(await client.OpenObjectForWritingAsync("test/test.zip", "application/zip"), ZipArchiveMode.Create))
+    using var client = new S3Client(new Uri("http://s3:9090/test/"), "foo-bar", "access-key", "secret-key");
+
+    using (var writer = new StreamWriter(new BrotliStream(await client.OpenObjectForWritingAsync("test.txt.br", "text/plain", new string[] { "br" }), CompressionMode.Compress)))
     {
-        var entry = zip.CreateEntry("test.txt");
-        using var writer = new StreamWriter(entry.Open());
         await writer.WriteLineAsync("Hello, this is a test object.");
         await writer.WriteLineAsync("The final size of the object is not known when upload is initiated.");
     }
 
-    var metadata = await client.GetObjectMetadataAsync("test/test.zip");
+    var metadata = await client.GetObjectMetadataAsync("test.txt.br");
 
-    using (var zip = new ZipArchive(await client.OpenObjectForReadingAsync("test/test.zip"), ZipArchiveMode.Read))
+    using (var reader = new StreamReader(new BrotliStream(await client.OpenObjectForReadingAsync("test.txt.br"), CompressionMode.Decompress)))
     {
-        var entry = zip.Entries.First();
-        using var reader = new StreamReader(entry.Open());
         Console.Write(await reader.ReadToEndAsync());
     }
+    
     await client.DeleteObjectAsync("test/test.zip");
     metadata = await client.GetObjectMetadataAsync("test/test.zip");
 }
