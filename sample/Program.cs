@@ -18,8 +18,8 @@ try
         Console.Write(await reader.ReadToEndAsync());
     }
     
-    await client.DeleteObjectAsync("test/test.zip");
-    metadata = await client.GetObjectMetadataAsync("test/test.zip");
+    await client.DeleteObjectAsync("test.txt.br");
+    metadata = await client.GetObjectMetadataAsync("test.txt.br"); // Will return null.
 }
 catch (S3Exception e)
 {
