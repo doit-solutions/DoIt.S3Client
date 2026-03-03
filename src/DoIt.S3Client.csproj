@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -10,8 +10,8 @@
     <PackageId>DoIt.S3Client</PackageId>
     <Authors>David Nordvall</Authors>
     <Company>do IT Solutions AB</Company>
-    <Description>An Simple Storage Service (S3) client with support for writing objects of unknown size.</Description>
-    <Copyright>Copyright (c) 2023 do IT Solutions AB</Copyright>
+    <Description>An Simple Storage Service (S3) client with support for writing objects of unknown size via streaming.</Description>
+    <Copyright>Copyright (c) 2026 do IT Solutions AB</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>Logo.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>

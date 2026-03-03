@@ -6,17 +6,33 @@
     "customizations": {
         "vscode": {
             "settings": {
-                "editor.fontFamily": "'Cascadia Code PL', monospace",
-                "editor.fontLigatures": true
+                "chat.disableAIFeatures": true,
+                "telemetry.feedback.enabled": false,
+                "telemetry.telemetryLevel": "off",
+                "dotnetAcquisitionExtension.enableTelemetry": false,
+                "gitlens.telemetry.enabled": false,
+                "editor.fontFamily": "'Cascadia Code NF', 'Cascadia Code PL', 'Cascadia Code', Consolas, 'Courier New', monospace",
+                "editor.fontLigatures": true,
+                "editor.formatOnSave": true,
+                "dotnet.preferRuntimeFromSDK": true,
+                "files.exclude": {
+                    "**/.git": true,
+                    "**/bin": true,
+                    "**/obj": true
+                },
+                "search.exclude": {
+                    "**/.git": true,
+                    "**/bin": true,
+                    "**/obj": true
+                }
             },
             "extensions": [
-                "ms-dotnettools.csharp",
-                "ms-dotnettools.csdevkit",
-                "editorconfig.editorconfig",
+                "dotjoshjohnson.xml",
                 "eamodio.gitlens",
-                "dotjoshjohnson.xml"
+                "editorconfig.editorconfig",
+                "ms-dotnettools.csdevkit"
             ]
         }
     },
-    "postCreateCommand": "git config --global --add safe.directory '/workspace'"
+    "postCreateCommand": "git config --global --add safe.directory '/workspace' && dotnet tool install --global dotnet-outdated-tool"
 }
