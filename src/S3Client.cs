@@ -20,6 +20,14 @@ public enum StorageClass
     ReducedRedundency
 }
 
+public enum ObjectVisibility
+{
+    Private,
+    PublicRead,
+    PublicReadWrite
+
+}
+
 public record MetaData(StorageClass StorageClass, string ETag, long SizeInBytes, string? ContentType, string? ContentEncoding);
 
 public class S3Client(Uri endpoint, string region, string accessKey, string secretKey) : IDisposable
@@ -27,10 +35,10 @@ public class S3Client(Uri endpoint, string region, string accessKey, string secr
     const string S3ServiceName = "s3";
     const string S3XmlNamespace = "http://s3.amazonaws.com/doc/2006-03-01/";
 
-    readonly HttpClient client = new HttpClient();
-    readonly AWS4RequestSigner signer = new AWS4RequestSigner(accessKey, secretKey);
+    readonly HttpClient client = new();
+    readonly AWS4RequestSigner signer = new(accessKey, secretKey);
 
-    public async Task<Stream> OpenObjectForWritingAsync(string key, string contentType, IEnumerable<string>? contentEncoding = null, StorageClass storageClass = StorageClass.Standard, CancellationToken cancellationToken = default)
+    public async Task<Stream> OpenObjectForWritingAsync(string key, string contentType, IEnumerable<string>? contentEncoding = null, StorageClass storageClass = StorageClass.Standard, ObjectVisibility visibility = ObjectVisibility.Private, CancellationToken cancellationToken = default)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, new Uri(endpoint, $"{key}?uploads"));
         req.Content = new StringContent(string.Empty, new System.Net.Http.Headers.MediaTypeHeaderValue(contentType));
@@ -54,6 +62,12 @@ public class S3Client(Uri endpoint, string region, string accessKey, string secr
             StorageClass.ReducedRedundency => "REDUCED_REDUNDANCY",
 #pragma warning restore 0618
             _ => "STANDARD"
+        });
+        req.Content.Headers.Add("x-amz-acl", visibility switch
+        {
+            ObjectVisibility.PublicRead => "public-read",
+            ObjectVisibility.PublicReadWrite => "public-read-write",
+            _ => "private"
         });
         using var signedReq = await signer.Sign(req, S3ServiceName, region);
         using var resp = await client.SendAsync(signedReq, cancellationToken);
